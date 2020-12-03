@@ -12,3 +12,4 @@ Building Instructions (Assume that linux kernel build tools are already setup)
 
 Version History
 V.1.0 The initial NAPI lan78xx driver release for linux kernel 4.9.x
+      Tested on 4.9.112
