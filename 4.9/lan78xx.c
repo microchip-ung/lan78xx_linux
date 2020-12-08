@@ -3268,7 +3268,7 @@ static void lan78xx_skb_return(struct lan78xx_net *dev, struct sk_buff *skb)
 static int lan78xx_rx(struct lan78xx_net *dev, struct sk_buff *skb,
 		      int budget, int *work_done)
 {
-	if (skb->len < RX_SKB_MIN_LEN)
+	if (skb->len < RX_SKB_MIN_LEN && skb->len)
 		return -1;
 
 	/* Extract frames from the URB buffer and pass each one to
@@ -3414,7 +3414,7 @@ static void rx_complete(struct urb *urb)
 
 	switch (urb_status) {
 	case 0:
-		if (skb->len < RX_SKB_MIN_LEN) {
+		if (skb->len < RX_SKB_MIN_LEN && skb->len) {
 			state = rx_cleanup;
 			dev->net->stats.rx_errors++;
 			dev->net->stats.rx_length_errors++;
