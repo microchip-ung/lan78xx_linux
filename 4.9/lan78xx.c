@@ -36,6 +36,9 @@ Ver: 1.0
 #include <net/ip6_checksum.h>
 #include <net/vxlan.h>
 #include <linux/microchipphy.h>
+#include <linux/phy.h>
+
+
 #include "lan78xx.h"
 
 #define DRIVER_AUTHOR	"WOOJUNG HUH <woojung.huh@microchip.com>"
@@ -1315,7 +1318,8 @@ static void lan78xx_rx_urb_submit_all(struct lan78xx_net *dev);
 static int lan78xx_link_reset(struct lan78xx_net *dev)
 {
 	struct phy_device *phydev = dev->net->phydev;
-	struct ethtool_cmd ecmd = { .cmd = ETHTOOL_GSET };
+	//struct ethtool_cmd ecmd = { .cmd = ETHTOOL_GSET };
+	struct ethtool_link_ksettings ecmd;
 	int ladv, radv, ret;
 	u32 buf;
 
@@ -1343,19 +1347,19 @@ static int lan78xx_link_reset(struct lan78xx_net *dev)
 		if (unlikely(ret < 0))
 			return -EIO;
 
-		phy_mac_interrupt(phydev, 0);
+		phy_mac_interrupt(phydev);
 
 		del_timer(&dev->stat_monitor);
 	} else if (phydev->link && !dev->link_on) {
 		dev->link_on = true;
 
-		phy_ethtool_gset(phydev, &ecmd);
+		phy_ethtool_ksettings_get(phydev, &ecmd);
 
 		ret = phy_read(phydev, LAN88XX_INT_STS);
 
 		if (DEFAULT_U1_U2_INIT_ENABLE &&
 		    dev->udev->speed == USB_SPEED_SUPER) {
-			if (ethtool_cmd_speed(&ecmd) == 1000) {
+			if (ecmd.base.speed  == 1000) {
 				/* disable U2 */
 				ret = lan78xx_read_reg(dev, USB_CFG1, &buf);
 				buf &= ~USB_CFG1_DEV_U2_INIT_EN_;
@@ -1388,10 +1392,9 @@ static int lan78xx_link_reset(struct lan78xx_net *dev)
 
 		netif_dbg(dev, link, dev->net,
 			  "speed: %u duplex: %d anadv: 0x%04x anlpa: 0x%04x",
-			  ethtool_cmd_speed(&ecmd), ecmd.duplex, ladv, radv);
-
-		ret = lan78xx_update_flowcontrol(dev, ecmd.duplex, ladv, radv);
-		phy_mac_interrupt(phydev, 1);
+			  ecmd.base.speed, ecmd.base.duplex, ladv, radv);
+		ret = lan78xx_update_flowcontrol(dev, ecmd.base.duplex, ladv, radv);
+		phy_mac_interrupt(phydev);
 
 		if (!timer_pending(&dev->stat_monitor)) {
 			dev->delta = 1;
@@ -1725,7 +1728,7 @@ static void lan78xx_set_mdix_status(struct net_device *net, __u8 mdix_ctrl)
 	}
 	dev->mdix_ctrl = mdix_ctrl;
 }
-
+#if 0
 static int lan78xx_get_settings(struct net_device *net, struct ethtool_cmd *cmd)
 {
 	struct lan78xx_net *dev = netdev_priv(net);
@@ -1788,15 +1791,15 @@ static int lan78xx_set_settings(struct net_device *net, struct ethtool_cmd *cmd)
 
 	return ret;
 }
-
+#endif 
 static void lan78xx_get_pause(struct net_device *net,
 			      struct ethtool_pauseparam *pause)
 {
 	struct lan78xx_net *dev = netdev_priv(net);
 	struct phy_device *phydev = net->phydev;
-	struct ethtool_cmd ecmd = { .cmd = ETHTOOL_GSET };
+	struct ethtool_link_ksettings ecmd;
 
-	phy_ethtool_gset(phydev, &ecmd);
+	phy_ethtool_ksettings_get(phydev, &ecmd);
 
 	pause->autoneg = dev->fc_autoneg;
 
@@ -1812,12 +1815,12 @@ static int lan78xx_set_pause(struct net_device *net,
 {
 	struct lan78xx_net *dev = netdev_priv(net);
 	struct phy_device *phydev = net->phydev;
-	struct ethtool_cmd ecmd = { .cmd = ETHTOOL_GSET };
+	struct ethtool_link_ksettings ecmd;
 	int ret;
 
-	phy_ethtool_gset(phydev, &ecmd);
+	phy_ethtool_ksettings_get(phydev, &ecmd);
 
-	if (pause->autoneg && !ecmd.autoneg) {
+	if (pause->autoneg && !ecmd.base.autoneg) {
 		ret = -EINVAL;
 		goto exit;
 	}
@@ -1829,13 +1832,21 @@ static int lan78xx_set_pause(struct net_device *net,
 	if (pause->tx_pause)
 		dev->fc_request_control |= FLOW_CTRL_TX;
 
-	if (ecmd.autoneg) {
+	if (ecmd.base.autoneg) {
+		__ETHTOOL_DECLARE_LINK_MODE_MASK(fc) = { 0, };
 		u32 mii_adv;
 
-		ecmd.advertising &= ~(ADVERTISED_Pause | ADVERTISED_Asym_Pause);
+		//ecmd.link_modes.advertising &= ~(ADVERTISED_Pause | ADVERTISED_Asym_Pause);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_Pause_BIT,
+				   ecmd.link_modes.advertising);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT,
+				   ecmd.link_modes.advertising);
+
 		mii_adv = (u32)mii_advertise_flowctrl(dev->fc_request_control);
-		ecmd.advertising |= mii_adv_to_ethtool_adv_t(mii_adv);
-		phy_ethtool_sset(phydev, &ecmd);
+		mii_adv_to_linkmode_adv_t(fc, mii_adv);
+		linkmode_or(ecmd.link_modes.advertising, fc,
+			    ecmd.link_modes.advertising);
+		phy_ethtool_ksettings_set(phydev, &ecmd);
 	}
 
 	dev->fc_autoneg = pause->autoneg;
@@ -1878,8 +1889,10 @@ static const struct ethtool_ops lan78xx_ethtool_ops = {
 	.get_drvinfo	= lan78xx_get_drvinfo,
 	.get_msglevel	= lan78xx_get_msglevel,
 	.set_msglevel	= lan78xx_set_msglevel,
-	.get_settings	= lan78xx_get_settings,
-	.set_settings	= lan78xx_set_settings,
+//	.get_settings	= lan78xx_get_settings,
+//	.set_settings	= lan78xx_set_settings,
+	.get_link_ksettings = phy_ethtool_get_link_ksettings,
+	.set_link_ksettings = phy_ethtool_set_link_ksettings,
 	.get_eeprom_len = lan78xx_ethtool_get_eeprom_len,
 	.get_eeprom	= lan78xx_ethtool_get_eeprom,
 	.set_eeprom	= lan78xx_ethtool_set_eeprom,
@@ -2106,6 +2119,7 @@ static void lan78xx_link_status_change(struct net_device *net)
 
 static int lan78xx_phy_init(struct lan78xx_net *dev)
 {
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(fc) = { 0, };
 	int ret;
 	u32 mii_adv;
 	struct phy_device *phydev = dev->net->phydev;
@@ -2139,15 +2153,23 @@ static int lan78xx_phy_init(struct lan78xx_net *dev)
 	lan78xx_set_mdix_status(dev->net, ETH_TP_MDI_AUTO);
 
 	/* MAC doesn't support 1000T Half */
-	phydev->supported &= ~SUPPORTED_1000baseT_Half;
+	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_1000baseT_Half_BIT);
+
 
 	/* support both flow controls */
 	dev->fc_request_control = (FLOW_CTRL_RX | FLOW_CTRL_TX);
-	phydev->supported |= (SUPPORTED_Pause | SUPPORTED_Asym_Pause);
+	//phydev->supported |= (SUPPORTED_Pause | SUPPORTED_Asym_Pause);
 
-	phydev->advertising &= ~(ADVERTISED_Pause | ADVERTISED_Asym_Pause);
+
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_Pause_BIT,
+			   phydev->advertising);
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT,
+			   phydev->advertising);
+
+	//phydev->advertising &= ~(ADVERTISED_Pause | ADVERTISED_Asym_Pause);
 	mii_adv = (u32)mii_advertise_flowctrl(dev->fc_request_control);
-	phydev->advertising |= mii_adv_to_ethtool_adv_t(mii_adv);
+	mii_adv_to_linkmode_adv_t(fc, mii_adv);
+	//phydev->advertising |= mii_adv_to_ethtool_adv_t(mii_adv);
 
 	genphy_config_aneg(phydev);
 
@@ -3953,7 +3975,7 @@ static void lan78xx_disconnect(struct usb_interface *intf)
 	usb_put_dev(udev);
 }
 
-static void lan78xx_tx_timeout(struct net_device *net)
+static void lan78xx_tx_timeout(struct net_device *net, unsigned int txqueue)
 {
 	struct lan78xx_net *dev = netdev_priv(net);
 
@@ -3992,12 +4014,9 @@ static const struct net_device_ops lan78xx_netdev_ops = {
 	.ndo_features_check	= lan78xx_features_check,
 };
 
-static void lan78xx_stat_monitor(unsigned long param)
+static void lan78xx_stat_monitor(struct timer_list *t)
 {
-	struct lan78xx_net *dev;
-
-	dev = (struct lan78xx_net *)param;
-
+	struct lan78xx_net *dev = from_timer(dev, t, stat_monitor);
 	lan78xx_defer_kevent(dev, EVENT_STAT_UPDATE);
 }
 
@@ -4063,10 +4082,11 @@ static int lan78xx_probe(struct usb_interface *intf,
 	netdev->watchdog_timeo = TX_TIMEOUT_JIFFIES;
 	netdev->ethtool_ops = &lan78xx_ethtool_ops;
 
-	dev->stat_monitor.function = lan78xx_stat_monitor;
-	dev->stat_monitor.data = (unsigned long)dev;
+	//dev->stat_monitor.function = lan78xx_stat_monitor;
+	timer_setup(&dev->stat_monitor, lan78xx_stat_monitor, 0);
+	//dev->stat_monitor.data = (unsigned long)dev;
 	dev->delta = 1;
-	init_timer(&dev->stat_monitor);
+	//init_timer(&dev->stat_monitor);
 
 	mutex_init(&dev->stats.access_lock);
 
@@ -4570,7 +4590,7 @@ static const struct usb_device_id products[] = {
 };
 MODULE_DEVICE_TABLE(usb, products);
 
-static struct usb_driver lan78xx_driver = {
+static struct usb_driver lan7800_driver = {
 	.name			= DRIVER_NAME,
 	.id_table		= products,
 	.probe			= lan78xx_probe,
@@ -4582,7 +4602,7 @@ static struct usb_driver lan78xx_driver = {
 	.disable_hub_initiated_lpm = 1,
 };
 
-module_usb_driver(lan78xx_driver);
+module_usb_driver(lan7800_driver);
 
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);
