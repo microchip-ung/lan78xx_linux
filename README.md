@@ -1,11 +1,55 @@
+==============================================================================
+Linux Device driver for Microchip LAN78xx
+==============================================================================
 
-lan78xx Linux driver for kernel version x.x.x.
-This driver implemenets the NAPI mechanism.
+Contents:
 
-Building Instructions (Assume that linux kernel build tools are already setup)
-- Download kernel source tree of for your platform. Please make sure to download the kernel tree that matches with the driver version.
-- Replace lan78xx.c in /drivers/net/usb/
-- Make sure that lan78xx is enabled as a module in your config
-- $ sudo make drivers/net/usb/lan78xx.ko
-- $ sudo rmmod lan78xx
-- $ sudo insmod drivers/net/usb/lan78xx.ko
+1. Platforms and OS versions supported
+2. Device support
+3. Driver structure and file description
+4. Building and installing the driver
+
+1. Platforms and kernel versions supported
+------------------------------------------
+
+- x86/x64 PC
+
+2. Device support
+-----------------
+
+This release supports:
+  EVB-LAN7801-EDS
+	• J11 – Shunt installed between 1 and 2
+	• J15 – Shunt installed between 1 and 2
+	• J16 – Shunt installed between 1 and 2
+
+3. Driver structure and file description
+----------------------------------------
+
+Each directory correspond to a kernel version for which the driver is intended
+for.
+
+4. Building and installing the driver
+-------------------------------------
+
+Go to the corresponding directory and run the following commands:
+
+To apply the patch: 
+
+git apply <Patchname>
+
+The build command is:
+
+make
+
+The clean command is:
+
+make clean
+
+To install the module:
+
+insmod lan78xx.ko
+
+To remove the module
+
+rmmod lan78xx

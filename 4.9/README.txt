@@ -1,6 +1,7 @@
 readme.txt
 
 lan78xx_linux driver for kernel version 4.9
+This driver implemenets the NAPI mechanism.
 
 Building Instructions (Assume that linux kernel build tools are already setup)
 - Download 4.9.x kernel source tree for your platform.
