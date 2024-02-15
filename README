@@ -12,16 +12,17 @@ Contents:
 1. Platforms and kernel versions supported
 ------------------------------------------
 
-- x86/x64 PC
+    - x86/x64 PC
 
 2. Device support
 -----------------
 
 This release supports:
   EVB-LAN7801-EDS
-	• J11 – Shunt installed between 1 and 2
-	• J15 – Shunt installed between 1 and 2
-	• J16 – Shunt installed between 1 and 2
+    • J11 – Shunt installed between 1 and 2
+    • J15 – Shunt installed between 1 and 2
+    • J16 – Shunt installed between 1 and 2
+    • J18 – Shunt installed across default 3v3
 
 3. Driver structure and file description
 ----------------------------------------
@@ -34,9 +35,9 @@ for.
 
 Go to the corresponding directory and run the following commands:
 
-To apply the patch: 
+To apply the patch:
 
-git apply <Patchname>
+git apply <patchname>
 
 The build command is:
 
